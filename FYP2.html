@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>School Bus Tracker with ORS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    #map { height: 90vh; width: 100%; }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center">Live School Bus Tracker</h2>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([2.25, 102.27], 15);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    L.marker([2.24965, 102.27625]).addTo(map).bindPopup("<b>School</b>").openPopup();
+
+    let busMarker = null;
+    let boardingMarkers = [];
+    let alightingMarkers = [];
+
+    function formatDate(date) {
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    function formatTime(date) {
+      return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
+    }
+
+    function getDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3;
+      const toRad = x => x * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    async function fetchBoardingAlighting(channelId, apiKey, studentLabel, colors) {
+      // colors = {boarded: 'color1', alighted: 'color2'}
+      const res = await fetch(`https://api.thingspeak.com/channels/${channelId}/feeds.json?api_key=${apiKey}&results=100`);
+      const data = await res.json();
+      const feeds = data.feeds;
+
+      let markersBoarded = [];
+      let markersAlighted = [];
+
+      feeds.forEach(feed => {
+        const date = new Date(feed.created_at);
+        const boardingDate = formatDate(date);
+        const boardingTime = formatTime(date);
+
+        // 假設格式同學生1：field1~field16 分別對應4種狀態各兩欄，依序是
+        // field1~field2: Boarded Morning
+        // field3~field4: Alighted Morning
+        // field5~field6: Boarded Afternoon
+        // field7~field8: Alighted Afternoon
+
+        // 這邊依學生1格式，學生2也是用 field1~field16，所以讀取時要區分學生
+        const fields = [
+          [parseFloat(feed.field1), parseFloat(feed.field2), studentLabel, "Boarded (Morning)", colors.boarded],
+          [parseFloat(feed.field3), parseFloat(feed.field4), studentLabel, "Alighted (Morning)", colors.alighted],
+          [parseFloat(feed.field5), parseFloat(feed.field6), studentLabel, "Boarded (Afternoon)", colors.boarded],
+          [parseFloat(feed.field7), parseFloat(feed.field8), studentLabel, "Alighted (Afternoon)", colors.alighted],
+          [parseFloat(feed.field9), parseFloat(feed.field10), studentLabel, "Boarded (Morning 2)", colors.boarded], // 如果有多的，保留備用
+          [parseFloat(feed.field11), parseFloat(feed.field12), studentLabel, "Alighted (Morning 2)", colors.alighted],
+          [parseFloat(feed.field13), parseFloat(feed.field14), studentLabel, "Boarded (Afternoon 2)", colors.boarded],
+          [parseFloat(feed.field15), parseFloat(feed.field16), studentLabel, "Alighted (Afternoon 2)", colors.alighted],
+        ];
+
+        fields.forEach(([lat, lng, student, status, color]) => {
+          if (!isNaN(lat) && !isNaN(lng)) {
+            const marker = L.marker([lat, lng], {
+              icon: L.divIcon({
+                className: 'leaflet-div-icon',
+                html: `<div style="background-color:${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid black;"></div>`
+              })
+            }).bindPopup(`<b>${student}</b><br><b>Status:</b> ${status}<br><b>Date:</b> ${boardingDate}<br><b>Time:</b> ${boardingTime}`);
+            if (status.toLowerCase().includes("boarded")) {
+              markersBoarded.push(marker);
+            } else {
+              markersAlighted.push(marker);
+            }
+          }
+        });
+      });
+
+      return { markersBoarded, markersAlighted };
+    }
+
+    async function updateRoute() {
+      try {
+        boardingMarkers.forEach(m => map.removeLayer(m));
+        alightingMarkers.forEach(m => map.removeLayer(m));
+        boardingMarkers = [];
+        alightingMarkers = [];
+
+        const student1Data = await fetchBoardingAlighting("2972145", "JPK6BGA6030FITL3", "Student 1", { boarded: "green", alighted: "red" });
+        const student2Data = await fetchBoardingAlighting("2978232", "0725ANB73FUNRENQ", "Student 2", { boarded: "orange", alighted: "purple" });
+
+        student1Data.markersBoarded.forEach(m => {
+          m.addTo(map);
+          boardingMarkers.push(m);
+        });
+        student1Data.markersAlighted.forEach(m => {
+          m.addTo(map);
+          alightingMarkers.push(m);
+        });
+        student2Data.markersBoarded.forEach(m => {
+          m.addTo(map);
+          boardingMarkers.push(m);
+        });
+        student2Data.markersAlighted.forEach(m => {
+          m.addTo(map);
+          alightingMarkers.push(m);
+        });
+
+        const resDynamic = await fetch("https://api.thingspeak.com/channels/2933268/feeds.json?api_key=J7PPV4XU4P4FC12I&results=50");
+        const dataDynamic = await resDynamic.json();
+        const feedsDynamic = dataDynamic.feeds;
+
+        let thirdScanTime = null;
+        let hasThirdScanOccurred = false;
+        if (student1Data.markersBoarded.length > 2) {
+
+          const staticRes = await fetch("https://api.thingspeak.com/channels/2972145/feeds.json?api_key=JPK6BGA6030FITL3&results=100");
+          const staticData = await staticRes.json();
+          if (staticData.feeds.length >= 3) {
+            const thirdFeed = staticData.feeds[2];
+            if (!isNaN(parseFloat(thirdFeed.field5)) && !isNaN(parseFloat(thirdFeed.field6))) {
+              thirdScanTime = new Date(thirdFeed.created_at);
+              hasThirdScanOccurred = true;
+            }
+          }
+        }
+
+        const coordsBefore = [], coordsAfter = [];
+        let lastLat = null, lastLng = null;
+
+        feedsDynamic.forEach(feed => {
+          const lat = parseFloat(feed.field5);
+          const lng = parseFloat(feed.field6);
+          const timestamp = new Date(feed.created_at);
+          if (isNaN(lat) || isNaN(lng)) return;
+
+          if (lastLat === null || getDistance(lat, lng, lastLat, lastLng) >= 5) {
+            if (hasThirdScanOccurred && timestamp > thirdScanTime) {
+              coordsAfter.push([lng, lat]); 
+            } else {
+              coordsBefore.push([lng, lat]);
+            }
+            lastLat = lat;
+            lastLng = lng;
+          }
+        });
+
+        async function getSnappedRoute(coords) {
+          const orsRes = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+            method: "POST",
+            headers: {
+              "Authorization": "5b3ce3597851110001cf6248a4766ab30138461f9d5ab4527dc14a9a",
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              coordinates: coords,
+              preference: "recommended",
+              instructions: false
+            })
+          });
+
+          if (!orsRes.ok) throw new Error("ORS API request failed");
+          const orsData = await orsRes.json();
+          return orsData.features[0].geometry.coordinates.map(c => [c[1], c[0]]);
+        }
+
+        if (typeof routeLine !== "undefined" && routeLine !== null) {
+          map.removeLayer(routeLine);
+          routeLine = null;
+        }
+
+        const snappedBefore = coordsBefore.length >= 2 ? await getSnappedRoute(coordsBefore) : [];
+        const snappedAfter = coordsAfter.length >= 2 ? await getSnappedRoute(coordsAfter) : [];
+
+        if (snappedBefore.length > 0) {
+          L.polyline(snappedBefore, { color: 'blue', weight: 5 }).addTo(map);
+        }
+        if (snappedAfter.length > 0) {
+          L.polyline(snappedAfter, { color: 'green', weight: 5 }).addTo(map);
+        }
+
+        const latestPos = snappedAfter.length > 0 ? snappedAfter[snappedAfter.length - 1] :
+                         snappedBefore.length > 0 ? snappedBefore[snappedBefore.length - 1] : null;
+
+        if (latestPos) {
+          if (busMarker === null) {
+            busMarker = L.marker(latestPos).addTo(map).bindPopup("Latest Bus Location").openPopup();
+          } else {
+            busMarker.setLatLng(latestPos);
+          }
+
+          map.setView(latestPos);
+        }
+
+      } catch (error) {
+        console.error("Error updating map:", error);
+      }
+    }
+
+    updateRoute();
+    setInterval(updateRoute, 15000);
+  </script>
+</body>
+</html>

@@ -71,7 +71,6 @@ The system architecture consists of the following:
 - The web interface displays:
   - Live bus position
   - Trip direction (home → school or school → home)
-  - Recent RFID logs
 
 ## 🔮 Future Improvements
 

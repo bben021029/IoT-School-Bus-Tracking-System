@@ -4,7 +4,7 @@ An IoT-based school bus monitoring solution using GPS and RFID technology to tra
 
 ## 🧾 Overview
 
-This system is developed to track the location of a school bus in real time and log students’ boarding and alighting activities using RFID. Parents and administrators can view this data through a web interface. The solution is built with an Uno-ESP32 microcontroller and communicates with ThingSpeak for cloud-based data visualization.
+This system is developed to track the location of a school bus in real time and record students’ boarding and alighting activities using RFID. Parents and administrators can view this data through a web interface. The solution is built with an Uno-ESP32 microcontroller and communicates with ThingSpeak for cloud-based data visualization.
 
 ## ✨ Features
 

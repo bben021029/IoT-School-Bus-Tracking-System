@@ -66,15 +66,14 @@ The system architecture consists of the following:
 ## 📘 Usage
 
 - Students tap their RFID cards when boarding or alighting  
-- The system logs the timestamp, coordinates, and student ID to ThingSpeak  
+- The system record timestamp and coordinates to ThingSpeak  
 - The LCD screen displays the student ID and confirmation  
 - The web interface displays:
   - Live bus position
   - Trip direction (home → school or school → home)
 
 ## 🔮 Future Improvements
-
-- Add support for push notifications or integration with messaging APIs  
+ 
 - Implement geofencing alerts for out-of-bound routes  
 - Add secure login and data encryption for web dashboard  
 - Support for historical route replay and attendance summary reports  

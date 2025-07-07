@@ -61,7 +61,7 @@ The system architecture consists of the following:
 
 3. **Upload the Arduino code** to the Uno-ESP32 using Arduino IDE
 
-4. **Launch the web dashboard** to visualize the bus location and student log
+4. **Launch the web dashboard** to visualize the bus location
 
 ## 📘 Usage
 
